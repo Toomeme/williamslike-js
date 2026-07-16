@@ -22,7 +22,7 @@
   <section id="config">
     <header>
       <h2 class="sec-title">1. The Curve &amp; Deformation</h2>
-      <p class="sec-desc">Anticipation, overshoot, weight, and volume-preserving squash and stretch.</p>
+      <p class="sec-desc">Anticipation, overshoot, weight, volume-preserving squash &amp; stretch — and settle: follow-through vs spring.</p>
     </header>
 
     <div class="grid">
@@ -77,26 +77,28 @@
         <div class="bar" style="border-left:none; border-right:none; background:transparent;">
           <button id="replay-stage">Replay Stage</button>
           <button id="loop-stage" aria-pressed="false">Loop</button>
+          <button id="settle-toggle" aria-pressed="false" title="single: sail past once, ease home (animator's follow-through). spring: oscillate &amp; decay (physical spring).">Settle: Single</button>
+          <button id="copy-feels" title="Export every registered feel to CSS custom properties and copy the :root block.">Copy :root</button>
           <div class="preset">
-            <button data-p="0.08,0.14,0,0">Snap</button>
-            <button data-p="0.35,0.28,0.16,0.18">Toon</button>
-            <button data-p="0.92,0.22,0.04,0.30">Jelly</button>
-            <button data-p="0.4,0,0,0">Sober</button>
+            <button data-feel="snap">Snap</button>
+            <button data-feel="toon">Toon</button>
+            <button data-feel="jelly">Jelly</button>
+            <button data-feel="sober">Sober</button>
           </div>
         </div>
       </div>
     </div>
     
     <div class="stage" id="stage">
-      <div class="spec" data-anim="rise">rise</div>
-      <div class="spec" data-anim="pop">pop</div>
-      <div class="spec" data-anim="slide-left">slide</div>
-      <div class="spec" data-anim="drop">drop</div>
-      <div class="spec" data-anim="rise">rise</div>
-      <div class="spec" data-anim="swing">swing</div>
-      <div class="spec" data-anim="pop">pop</div>
-      <div class="spec" data-anim="fall">fall</div>
-      <div class="spec" data-anim="slide-right">slide</div>
+      <div class="spec" data-wl="rise">rise</div>
+      <div class="spec" data-wl="pop">pop</div>
+      <div class="spec" data-wl="slide-left">slide</div>
+      <div class="spec" data-wl="drop">drop</div>
+      <div class="spec" data-wl="rise">rise</div>
+      <div class="spec" data-wl="swing">swing</div>
+      <div class="spec" data-wl="pop">pop</div>
+      <div class="spec" data-wl="fall">fall</div>
+      <div class="spec" data-wl="slide-right">slide</div>
     </div>
   </section>
 
@@ -178,7 +180,7 @@
 </div>
 
 <script type="module">
-import williamslike, { curve, play as runAnimation, forceTier, tracks, generateSquashAndStretchCSS } from './williamslike.js';
+import williamslike, { curve, play as runAnimation, forceTier, tracks, generateSquashAndStretchCSS, getFeel, exportFeels } from './williamslike.js';
 
 const $ = id => document.getElementById(id);
 const reduceMedia = matchMedia('(prefers-reduced-motion: reduce)');
@@ -190,8 +192,15 @@ const specs = [...document.querySelectorAll('.spec')];
 const X = t => t * 560;
 const Y = v => 240 - v * 180;      // domain: y in [-0.33, 1.33]
 
-let opts = { weight: 0.35, overshoot: 0.2, anticipate: 0, squash: 0.18, distance: 30 };
+let opts = { weight: 0.35, overshoot: 0.2, anticipate: 0, squash: 0.18, distance: 30, settle: 'single' };
 let loopingStage = false, timerStage = null, ghost = '';
+
+// The single source of truth for the current curve's engine config. squash is a
+// 0..0.4 intensity here; the engine wants raw stretch/squash, so we map it once.
+const curveConfig = () => ({
+  weight: opts.weight, overshoot: opts.overshoot, anticipate: opts.anticipate,
+  stretch: 0.111 * opts.squash, squash: 5 * opts.squash, settle: opts.settle,
+});
 
 // Setup gridlines for scope
 (() => {
@@ -203,11 +212,7 @@ let loopingStage = false, timerStage = null, ghost = '';
 const makePath = pts => pts.map(([t,v], i) => `${i?'L':'M'}${X(t).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
 
 function renderScope() {
-  // Pass user config as intensity knob for squash
-  const config = {
-    weight: opts.weight, overshoot: opts.overshoot, anticipate: opts.anticipate,
-    stretch: 0.111 * opts.squash, squash: 5 * opts.squash
-  };
+  const config = curveConfig();
   const c = curve(config);
   
   $('ghost').setAttribute('d', ghost || '');
@@ -239,16 +244,17 @@ function playStage() {
   const c = renderScope();
   
   specs.forEach((el, i) => {
-    // We leverage the library's main play function here which handles the tier execution automatically
-    // Re-apply dataset so play() reads it, or just pass overrides.
+    // Drive the library's play() with the live-tuned overrides. Motion comes from
+    // the element's data-wl attribute; everything else is the current configurator state.
     runAnimation(el, {
-      motion: el.dataset.anim,
+      motion: el.dataset.wl,
       distance: 30,
       delay: i * 60,
       weight: opts.weight,
       overshoot: opts.overshoot,
       anticipate: opts.anticipate,
-      squash: opts.squash, 
+      squash: opts.squash,
+      settle: opts.settle,
       fade: true
     });
   });
@@ -262,7 +268,7 @@ function playStage() {
 
 function scheduleStage() {
   clearTimeout(timerStage);
-  if (loopingStage) timerStage = setTimeout(() => { playStage(); scheduleStage(); }, curve(opts).duration + specs.length * 60 + 520);
+  if (loopingStage) timerStage = setTimeout(() => { playStage(); scheduleStage(); }, curve(curveConfig()).duration + specs.length * 60 + 520);
 }
 
 // Attach inputs
@@ -281,15 +287,64 @@ $('loop-stage').onclick = e => {
   loopingStage ? (playStage(), scheduleStage()) : clearTimeout(timerStage);
 };
 
-// Presets
-for (const b of document.querySelectorAll('.preset button[data-p]')) {
+// Settle toggle (single = follow-through, spring = oscillate & decay)
+function syncSettleToggle() {
+  const spring = opts.settle === 'spring';
+  const b = $('settle-toggle');
+  b.setAttribute('aria-pressed', String(spring));
+  b.textContent = spring ? 'Settle: Spring' : 'Settle: Single';
+}
+$('settle-toggle').onclick = () => {
+  opts.settle = opts.settle === 'spring' ? 'single' : 'spring';
+  syncSettleToggle();
+  playStage(); scheduleStage();
+};
+
+// Sync the four sliders + their outputs to the current opts.
+function syncControls() {
+  for (const k of ['weight', 'overshoot', 'anticipate', 'squash']) {
+    $(k).value = opts[k];
+    $('o-' + k).textContent = (+opts[k]).toFixed(2);
+  }
+  syncSettleToggle();
+}
+
+// Presets are now the library's registered feels — one registry, read straight
+// back out. Selecting one hydrates the whole bundle, settle included (Jelly
+// opts into spring, exactly as the feel declares it).
+for (const b of document.querySelectorAll('.preset button[data-feel]')) {
   b.onclick = () => {
-    const [w, o, a, s] = b.dataset.p.split(',').map(Number);
-    opts = { weight: w, overshoot: o, anticipate: a, squash: s };
-    for (const [k, v] of Object.entries(opts)) { $(k).value = v; $('o-'+k).textContent = v.toFixed(2); }
+    const f = getFeel(b.dataset.feel) || {};
+    opts.weight     = f.weight     ?? 0.35;
+    opts.overshoot  = f.overshoot  ?? 0.2;
+    opts.anticipate = f.anticipate ?? 0;
+    opts.squash     = f.squash     ?? 0;
+    opts.settle     = f.settle     || 'single';
+    syncControls();
     playStage(); scheduleStage();
   };
 }
+
+// Copy :root — export every registered feel to CSS custom properties and copy
+// the block. This also writes the vars to the live :root, so the page's own CSS
+// could consume --wl-jelly-ease etc. immediately.
+$('copy-feels').onclick = async (e) => {
+  const { vars } = exportFeels();                       // writes to :root, returns the map
+  const block = ':root {\n' +
+    Object.entries(vars).map(([k, v]) => `  ${k}: ${v};`).join('\n') +
+    '\n}';
+  let copied = false;
+  try { await navigator.clipboard.writeText(block); copied = true; }
+  catch {
+    const ta = document.createElement('textarea');
+    ta.value = block; document.body.appendChild(ta); ta.select();
+    try { copied = document.execCommand('copy'); } catch {}
+    ta.remove();
+  }
+  const btn = e.currentTarget, label = 'Copy :root';
+  btn.textContent = copied ? 'Copied ✓' : 'Copy failed';
+  setTimeout(() => { btn.textContent = label; }, 1200);
+};
 
 
 /* =========================================================================
