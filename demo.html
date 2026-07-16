@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>williamslike — Unified Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="./demo.css" rel="stylesheet">
+</head>
+<body>
+<div class="wrap">
+
+  <!-- MAIN HEADER -->
+  <header class="main-head">
+    <h1>Williamslike <em>Motion</em>.</h1>
+    <p class="tag">One precomputed curve engine handling physical momentum, squash &amp; stretch, accessibility, and rendering tier graceful degradation.</p>
+  </header>
+
+  <!-- 1. CONFIGURATOR & STAGE -->
+  <section id="config">
+    <header>
+      <h2 class="sec-title">1. The Curve &amp; Deformation</h2>
+      <p class="sec-desc">Anticipation, overshoot, weight, and volume-preserving squash and stretch.</p>
+    </header>
+
+    <div class="grid">
+      <div class="panel">
+        <div class="eyebrow"><span>Easing scope</span><span id="range">—</span></div>
+        <svg class="scope" viewBox="0 0 560 300" role="img" aria-label="Plot of the generated easing curve">
+          <rect class="band" x="0" y="0" width="560" height="60"></rect>
+          <rect class="band" x="0" y="240" width="560" height="60"></rect>
+          <g id="gridlines"></g>
+          <line class="axis" x1="0" y1="240" x2="560" y2="240"></line>
+          <line class="axis" x1="0" y1="60" x2="560" y2="60" stroke-dasharray="4 4"></line>
+          <text class="lbl" x="6" y="54">1.0 — target / scale 1x</text>
+          <text class="lbl" x="6" y="255">0.0 — origin</text>
+          <path class="ghost" id="ghost"></path>
+          <path class="trace" id="trace"></path>
+          <path class="trace-deform" id="trace-deform"></path>
+          <circle class="head" id="head" cx="0" cy="240" r="5"></circle>
+        </svg>
+        <div class="readout" id="css">…</div>
+        <div class="stats">
+          <span>duration <b id="s-dur">—</b></span>
+          <span>pos stops <b id="s-stops">—</b></span>
+          <span style="color:var(--deform);">deform stops <b id="s-dstops">—</b></span>
+          <span>payload <b id="s-bytes">—</b></span>
+        </div>
+      </div>
+
+      <div class="panel" style="display:flex; flex-direction:column; padding:0;">
+        <div class="console" style="border:none;">
+          <div class="ctrl">
+            <label for="weight">Weight <output id="o-weight">0.35</output></label>
+            <p class="hint">Reluctance to start moving — and to stop.</p>
+            <input id="weight" type="range" min="0" max="1" step="0.01" value="0.35">
+          </div>
+          <div class="ctrl">
+            <label for="overshoot">Overshoot <output id="o-overshoot">0.20</output></label>
+            <p class="hint">Distance sailed past the target before settling.</p>
+            <input id="overshoot" type="range" min="0" max="0.8" step="0.01" value="0.2">
+          </div>
+          <div class="ctrl">
+            <label for="anticipate">Anticipation <output id="o-anticipate">0.00</output></label>
+            <p class="hint">Wind back the other way before it goes.</p>
+            <input id="anticipate" type="range" min="0" max="0.4" step="0.01" value="0">
+          </div>
+          <div class="ctrl orange">
+            <label for="squash">Squash &amp; Stretch <output id="o-squash">0.18</output></label>
+            <p class="hint">Speed-driven stretch and impact squash intensity.</p>
+            <input id="squash" type="range" min="0" max="0.4" step="0.01" value="0.18">
+          </div>
+        </div>
+        
+        <div class="bar" style="border-left:none; border-right:none; background:transparent;">
+          <button id="replay-stage">Replay Stage</button>
+          <button id="loop-stage" aria-pressed="false">Loop</button>
+          <div class="preset">
+            <button data-p="0.08,0.14,0,0">Snap</button>
+            <button data-p="0.35,0.28,0.16,0.18">Toon</button>
+            <button data-p="0.92,0.22,0.04,0.30">Jelly</button>
+            <button data-p="0.4,0,0,0">Sober</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="stage" id="stage">
+      <div class="spec" data-anim="rise">rise</div>
+      <div class="spec" data-anim="pop">pop</div>
+      <div class="spec" data-anim="slide-left">slide</div>
+      <div class="spec" data-anim="drop">drop</div>
+      <div class="spec" data-anim="rise">rise</div>
+      <div class="spec" data-anim="swing">swing</div>
+      <div class="spec" data-anim="pop">pop</div>
+      <div class="spec" data-anim="fall">fall</div>
+      <div class="spec" data-anim="slide-right">slide</div>
+    </div>
+  </section>
+
+  <!-- 2. REDUCED MOTION -->
+  <section id="accessibility">
+    <header>
+      <h2 class="sec-title">2. Reduced Motion (Accessibility)</h2>
+      <p class="sec-desc">A degradation, not a kill switch. Stagger and intent are preserved without vestibular triggers.</p>
+    </header>
+
+    <div class="bar">
+      <button id="replay-reduced">Replay Both</button>
+      <button id="sim-reduced" class="btn-calm" aria-pressed="false">Simulate OS Preference</button>
+      <span class="tag" style="margin-left:auto;text-transform:none;">OS requesting: <b style="color:var(--ink)" id="os-pref">—</b></span>
+    </div>
+
+    <div class="cols">
+      <div class="col" id="col-full">
+        <h2><span>Full Motion</span><span id="t-full">—</span></h2>
+        <p class="desc">Overshoot 0.3 · Anticipation 0.12 · 28px travel</p>
+        <div class="stack" id="stack-full"></div>
+      </div>
+
+      <div class="col" id="col-calm">
+        <h2><span>Calm Variant</span><span id="t-calm">—</span></h2>
+        <p class="desc">Momentum removed · Travel clamped to 4px · Opacity fade preserved</p>
+        <div class="stack" id="stack-calm"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. RENDERING TIERS -->
+  <section id="performance" style="border-bottom:none;">
+    <header>
+      <h2 class="sec-title">3. Rendering Tiers (Performance)</h2>
+      <p class="sec-desc">Test how the library falls back through rendering strategies under load.</p>
+    </header>
+
+    <div class="tiers">
+      <button class="tier" data-tier="1" aria-pressed="true">
+        <div class="n">Tier 1 · WAAPI + linear()</div>
+        <div class="h">Easing String</div>
+        <div class="m">Two keyframes on the compositor. The curve lives in the string.</div>
+      </button>
+      <button class="tier" data-tier="2" aria-pressed="false">
+        <div class="n">Tier 2 · Fallback / Squash</div>
+        <div class="h">Baked Keyframes</div>
+        <div class="m">Curve baked into per-progress CSS transform offsets. Compositor.</div>
+      </button>
+      <button class="tier" data-tier="3" aria-pressed="false">
+        <div class="n">Tier 3 · Legacy</div>
+        <div class="h">Shared rAF Loop</div>
+        <div class="m">O(1) LUT lookup, one loop for the whole page. Main thread.</div>
+      </button>
+    </div>
+
+    <div class="bar">
+      <button id="replay-tiers">Replay Swarm</button>
+      <button id="loop-tiers" aria-pressed="false">Loop Swarm</button>
+      <label class="count" for="n-els" style="margin-left:auto;">
+        Elements <input id="n-els" type="range" min="50" max="1500" step="50" value="400"><b id="nv">400</b>
+      </label>
+    </div>
+
+    <div class="meters">
+      <div class="meter"><div class="k">Frame rate</div><div class="v" id="m-fps">—</div></div>
+      <div class="meter"><div class="k">Worst frame</div><div class="v" id="m-worst">—</div></div>
+      <div class="meter"><div class="k">Library JS cost/frame</div><div class="v" id="m-js">—</div></div>
+      <div class="meter"><div class="k">Active Elements</div><div class="v" id="m-curves">—</div></div>
+    </div>
+
+    <div id="field"></div>
+  </section>
+
+  <footer>
+    Nothing on this page relies on CSS to become visible. The from-state exists only inside the animation.<br>
+    A failed script or suppressed animation leaves all content readable immediately.
+  </footer>
+</div>
+
+<script type="module">
+import williamslike, { curve, play as runAnimation, forceTier, tracks, generateSquashAndStretchCSS } from './williamslike.js';
+
+const $ = id => document.getElementById(id);
+const reduceMedia = matchMedia('(prefers-reduced-motion: reduce)');
+
+/* =========================================================================
+   1. CONFIGURATOR & STAGE (Bench & Squash)
+   ========================================================================= */
+const specs = [...document.querySelectorAll('.spec')];
+const X = t => t * 560;
+const Y = v => 240 - v * 180;      // domain: y in [-0.33, 1.33]
+
+let opts = { weight: 0.35, overshoot: 0.2, anticipate: 0, squash: 0.18, distance: 30 };
+let loopingStage = false, timerStage = null, ghost = '';
+
+// Setup gridlines for scope
+(() => {
+  let g = '';
+  for(let i=1; i<10; i++) g += `<line class="gridline" x1="${i*56}" y1="0" x2="${i*56}" y2="300"/>`;
+  $('gridlines').innerHTML = g;
+})();
+
+const makePath = pts => pts.map(([t,v], i) => `${i?'L':'M'}${X(t).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+
+function renderScope() {
+  // Pass user config as intensity knob for squash
+  const config = {
+    weight: opts.weight, overshoot: opts.overshoot, anticipate: opts.anticipate,
+    stretch: 0.111 * opts.squash, squash: 5 * opts.squash
+  };
+  const c = curve(config);
+  
+  $('ghost').setAttribute('d', ghost || '');
+  $('trace').setAttribute('d', makePath(c.points));
+  $('trace-deform').setAttribute('d', makePath(c.deformPoints));
+  ghost = makePath(c.points);
+
+  const lo = Math.min(...c.points.map(p => p[1]));
+  const hi = Math.max(...c.points.map(p => p[1]));
+  $('range').textContent = `output ${lo.toFixed(2)} → ${hi.toFixed(2)}`;
+  
+  // Format readout CSS
+  const posCSS = `<b>animation-timing-function:</b><br>${c.easing};`;
+  const deformCSS = opts.squash > 0 
+    ? `<br><br><b class="d">deform-timing-function:</b><br>linear(${c.deformKeep.map(([t,v])=>`${v.toFixed(3)} ${(t*100).toFixed(1)}%`).join(', ')});` 
+    : '';
+  $('css').innerHTML = posCSS + deformCSS;
+  
+  $('s-dur').textContent = c.duration + 'ms';
+  $('s-stops').textContent = c.stops;
+  $('s-dstops').textContent = c.deformKeep.length;
+  $('s-bytes').textContent = new Blob([c.easing]).size + ' B';
+
+  return c;
+}
+
+function playStage() {
+  if (reduceMedia.matches) return;
+  const c = renderScope();
+  
+  specs.forEach((el, i) => {
+    // We leverage the library's main play function here which handles the tier execution automatically
+    // Re-apply dataset so play() reads it, or just pass overrides.
+    runAnimation(el, {
+      motion: el.dataset.anim,
+      distance: 30,
+      delay: i * 60,
+      weight: opts.weight,
+      overshoot: opts.overshoot,
+      anticipate: opts.anticipate,
+      squash: opts.squash, 
+      fade: true
+    });
+  });
+
+  // Animate the playhead on the SVG linearly while riding the actual easing on Y
+  const h = $('head');
+  h.getAnimations().forEach(a => a.cancel());
+  h.animate([{cx: '0px'}, {cx: '560px'}], {duration: c.duration, easing: 'linear', fill: 'forwards'});
+  h.animate([{cy: Y(0)+'px'}, {cy: Y(1)+'px'}], {duration: c.duration, easing: c.easing, fill: 'forwards'});
+}
+
+function scheduleStage() {
+  clearTimeout(timerStage);
+  if (loopingStage) timerStage = setTimeout(() => { playStage(); scheduleStage(); }, curve(opts).duration + specs.length * 60 + 520);
+}
+
+// Attach inputs
+for (const id of ['weight', 'overshoot', 'anticipate', 'squash']) {
+  $(id).addEventListener('input', e => {
+    opts[id] = +e.target.value;
+    $('o-'+id).textContent = (+e.target.value).toFixed(2);
+    playStage(); scheduleStage();
+  });
+}
+
+$('replay-stage').onclick = () => { playStage(); scheduleStage(); };
+$('loop-stage').onclick = e => {
+  loopingStage = !loopingStage;
+  e.target.setAttribute('aria-pressed', loopingStage);
+  loopingStage ? (playStage(), scheduleStage()) : clearTimeout(timerStage);
+};
+
+// Presets
+for (const b of document.querySelectorAll('.preset button[data-p]')) {
+  b.onclick = () => {
+    const [w, o, a, s] = b.dataset.p.split(',').map(Number);
+    opts = { weight: w, overshoot: o, anticipate: a, squash: s };
+    for (const [k, v] of Object.entries(opts)) { $(k).value = v; $('o-'+k).textContent = v.toFixed(2); }
+    playStage(); scheduleStage();
+  };
+}
+
+
+/* =========================================================================
+   2. REDUCED MOTION (Accessibility)
+   ========================================================================= */
+const FULL_CFG = { weight: .4, overshoot: .3, anticipate: .12, distance: 28, squash: 0 };
+const CALM_CFG = { weight: .25, overshoot: 0, anticipate: 0, distance: 4, duration: 260, squash: 0 };
+const STAGGER = 70;
+
+const CARDS = [
+  ['Sessions', '12,480', '+8.2%'],
+  ['Median latency', '214ms', '−31ms'],
+  ['Error rate', '0.04%', '−0.01'],
+];
+const genStack = el => {
+  el.innerHTML = CARDS.map(([k,n,d]) => `<div class="card"><div class="k">${k}</div><div class="n">${n}<em>${d}</em></div></div>`).join('');
+  return [...el.children];
+};
+const fullCards = genStack($('stack-full'));
+const calmCards = genStack($('stack-calm'));
+
+let simReduced = false;
+
+const paintOSPref = () => { $('os-pref').textContent = reduceMedia.matches ? 'reduce' : 'no-preference'; };
+reduceMedia.addEventListener('change', paintOSPref); paintOSPref();
+
+function runReducedCards(cards, cfg, labelId) {
+  const c = curve(cfg);
+  const dur = cfg.duration ?? c.duration;
+  $(labelId).textContent = `${dur}ms`;
+  
+  cards.forEach((el, i) => {
+    el.getAnimations().forEach(a => a.cancel());
+    const from = `translate3d(0px,${cfg.distance}px,0px)`;
+    if (cfg.distance !== 0) {
+      el.animate([{transform: from}, {transform: 'translate3d(0px,0px,0px)'}],
+        {duration: dur, delay: i * STAGGER, fill: 'both', easing: c.easing});
+    }
+    el.animate([{opacity: 0}, {opacity: 1}],
+      {duration: Math.min(dur, 380), delay: i * STAGGER, fill: 'both', easing: 'cubic-bezier(.2,0,.2,1)'});
+  });
+}
+
+function playReducedSection() {
+  const reduced = reduceMedia.matches || simReduced;
+  // Left column obeys preference (real-world simulation)
+  runReducedCards(fullCards, reduced ? CALM_CFG : FULL_CFG, 't-full');
+  // Right column always shows calm variant
+  runReducedCards(calmCards, CALM_CFG, 't-calm');
+
+  $('col-full').classList.toggle('on', reduced);
+  $('t-full').textContent += reduced ? ' · degraded' : '';
+}
+
+$('replay-reduced').onclick = playReducedSection;
+$('sim-reduced').onclick = e => { 
+  simReduced = !simReduced; 
+  e.currentTarget.setAttribute('aria-pressed', simReduced); 
+  playReducedSection(); 
+};
+
+
+/* =========================================================================
+   3. RENDERING TIERS (Performance)
+   ========================================================================= */
+let jsMs = 0;
+const origRaf = window.requestAnimationFrame;
+
+// Monkey-patch rAF to track our own JS execution time inside it.
+window.requestAnimationFrame = function(cb) {
+  return origRaf(function(now) {
+    const t0 = performance.now();
+    cb(now);
+    const dt = performance.now() - t0;
+    // Don't count the meter itself
+    if (cb !== renderMeter) jsMs = jsMs === 0 ? dt : (jsMs * 0.9 + dt * 0.1);
+  });
+};
+
+let lastFrame = performance.now(), framesCount = 0, timeAcc = 0, worstFrame = 0;
+function renderMeter(now) {
+  const dt = now - lastFrame; 
+  lastFrame = now;
+  framesCount++; 
+  timeAcc += dt;
+  if (dt > worstFrame && framesCount > 3) worstFrame = dt;
+  
+  if (timeAcc >= 500) {
+    const fps = Math.round(framesCount / (timeAcc / 1000));
+    
+    const f = $('m-fps'); f.textContent = fps;
+    f.className = 'v ' + (fps >= 55 ? 'good' : fps >= 40 ? 'warn' : 'bad');
+    
+    const w = $('m-worst'); w.textContent = worstFrame.toFixed(1) + 'ms';
+    w.className = 'v ' + (worstFrame < 20 ? 'good' : worstFrame < 34 ? 'warn' : 'bad');
+    
+    const j = $('m-js'); j.textContent = jsMs.toFixed(2) + 'ms';
+    j.className = 'v ' + (jsMs < 2 ? 'good' : jsMs < 6 ? 'warn' : 'bad');
+    
+    framesCount = 0; timeAcc = 0; worstFrame = 0;
+  }
+  origRaf(renderMeter);
+}
+origRaf(renderMeter);
+
+let N_ELS = 400, loopingTiers = false, timerTiers = null;
+const field = $('field');
+
+function buildTiersField() {
+  field.innerHTML = '';
+  for (let i = 0; i < N_ELS; i++) {
+    const d = document.createElement('div');
+    d.className = 'dot';
+    field.appendChild(d);
+  }
+  $('m-curves').textContent = N_ELS;
+}
+
+function playTiersSwarm() {
+  for (let i = 0; i < field.children.length; i++) {
+    const d = field.children[i];
+    d.getAnimations().forEach(a => a.cancel());
+    d.style.cssText = '';
+    
+    runAnimation(d, {
+      motion: 'drop',
+      distance: 24,
+      delay: (i % 40) * 12,
+      duration: 700,
+      squash: 0 // Keep squash 0 here to stress pure positional tiers
+    });
+  }
+}
+
+function scheduleTiersLoop() {
+  clearTimeout(timerTiers);
+  if (loopingTiers) timerTiers = setTimeout(() => { playTiersSwarm(); scheduleTiersLoop(); }, 1700);
+}
+
+// Tier Switcher
+for (const b of document.querySelectorAll('.tier')) {
+  b.onclick = () => {
+    forceTier(+b.dataset.tier);
+    for (const x of document.querySelectorAll('.tier')) x.setAttribute('aria-pressed', x === b);
+    
+    // Kill manual tracks if switching away from Tier 3
+    for (const t of tracks) t.dead = true;
+    tracks.length = 0;
+    
+    for (const d of field.children) {
+      d.getAnimations().forEach(a => a.cancel());
+      d.style.cssText = '';
+      d.className = 'dot';
+    }
+    jsMs = 0;
+    playTiersSwarm();
+    scheduleTiersLoop();
+  };
+}
+
+$('n-els').oninput = e => { 
+  N_ELS = +e.target.value; 
+  $('nv').textContent = N_ELS; 
+  buildTiersField(); 
+  playTiersSwarm(); 
+};
+
+$('replay-tiers').onclick = () => { playTiersSwarm(); scheduleTiersLoop(); };
+$('loop-tiers').onclick = e => { 
+  loopingTiers = !loopingTiers; 
+  e.currentTarget.setAttribute('aria-pressed', loopingTiers); 
+  scheduleTiersLoop(); 
+  if (loopingTiers) playTiersSwarm();
+};
+
+
+/* =========================================================================
+   INITIALIZATION
+   ========================================================================= */
+renderScope(); 
+buildTiersField();
+
+setTimeout(() => {
+  playStage();
+  playReducedSection();
+  playTiersSwarm();
+}, 220);
+
+</script>
+</body>
+</html>
