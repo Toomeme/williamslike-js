@@ -1,31 +1,34 @@
+/**
+ * williamslike.js
+ */
+
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const round = (v, p) => +v.toFixed(p);
 
-/* Global config: the root of the cascade.
-
-   Resolution runs low -> high:
-     CONFIG.defaults  ->  data-wl-feel preset  ->  data-wl-tune inline  ->  play() override
-
-   `defaults` are SHAPING toggles — they seed the curve but any feel/tune/override
-   downstream can still override them per element (a house can be single-by-default
-   and still ship a 'jelly' feel that opts back into spring). The rest are POLICY —
-   genuinely engine-wide, no per-element meaning: set once, forget. */
+/**
+ * Global configuration.
+ * Acts as the root of the settings cascade. Resolution follows a low-to-high order:
+ * CONFIG.defaults -> data-wl-feel preset -> data-wl-tune inline -> play() override.
+ * 
+ * `defaults` represent shaping parameters that seed the curve calculation.
+ * The remaining properties are engine-wide policies applied universally.
+ */
 const CONFIG = {
-  defaults: { settle: 'single', preserveVolume: true },  // cascade root (overridable)
-  timeScale: 1,                                           // master multiplier on every duration
-  durationRange: [200, 1200],                             // clamp on what the engine emits (ms)
-  reducedMotion: 'nudge',                                 // default calm strategy when the OS asks for less
+  defaults: { settle: 'single', preserveVolume: true },
+  timeScale: 1,               // Master multiplier applied to all calculated durations
+  durationRange: [200, 1200], // Minimum and maximum allowed engine duration (in milliseconds)
+  reducedMotion: 'nudge',     // Strategy to apply when prefers-reduced-motion is enabled
 };
 
-/* Curve engine: shared by all three tiers.
-
-overshoot: damping ratio (bounce past the target)
-anticipate: a wind-back before the move
-weight: inertia. A heavy thing is slow to start and slow to stop, but hauls fast through the middle of its arc. */
-
+// Constant stiffness for the underlying physics model
 const K = 600;
 
-// Generalized smoothstep. n=1 is linear; n>1 concentrates change in the middle with near-zero slope at both ends.
+/**
+ * Generalized smoothstep function.
+ * @param {number} u - Normalized input [0, 1]
+ * @param {number} n - Steepness factor. n=1 is linear. n>1 concentrates change near the midpoint.
+ * @returns {number} Interpolated value
+ */
 function rampN(u, n) {
   if (u <= 0) return 0;
   if (u >= 1) return 1;
@@ -33,36 +36,46 @@ function rampN(u, n) {
   return a / (a + b);
 }
 
+/**
+ * Simulates a spring-damper system to generate position and deformation curves.
+ * 
+ * @param {Object} config - Physics parameters
+ * @param {number} config.weight - Inertia factor. Higher weight starts/stops slower but moves faster mid-arc.
+ * @param {number} config.overshoot - Damping ratio control. Higher values cause larger bounds past the target.
+ * @param {number} config.anticipate - Wind-back amount before the primary motion begins.
+ * @param {number} config.stretch - Stretch multiplier scaling with normalized speed.
+ * @param {number} config.squash - Deformation amount applied when the position exceeds the target.
+ * @param {string|number} config.settle - Oscillation limit. 'spring' allows infinite oscillation, 'single' locks after one crest.
+ * @returns {Object} Precalculated points, deformation points, and total duration in seconds.
+ */
 export function simulate({
   weight = 0.35, overshoot = 0.2, anticipate = 0,
   stretch = 0.02, squash = 0.9, settle = 'single',
 } = {}) {
   const w = clamp(weight, 0, 1), ov = clamp(overshoot, 0, 1), an = clamp(anticipate, 0, 0.6);
 
-  // overshoot = damping ratio. Low ov => near-critical, clean landing.
+  // Calculate standard damping ratio (zeta) based on overshoot and anticipation limits.
   const rel = ov / (1 + an);
   let zeta;
-  if (rel < 0.002) zeta = 1;
-  else { const L = Math.log(rel); zeta = -L / Math.sqrt(Math.PI * Math.PI + L * L); }
+  if (rel < 0.002) {
+    zeta = 1;
+  } else { 
+    const L = Math.log(rel); 
+    zeta = -L / Math.sqrt(Math.PI * Math.PI + L * L); 
+  }
   zeta = clamp(zeta, 0.12, 1.2);
 
-  // Weight barely touches mass, just enough momentum to carry the middle. It mainly steepens the reference ramp and lengthens it a little.
   const m = 1.0 + 0.6 * w;
   const c = 2 * zeta * Math.sqrt(K * m);
-  const cCrit = 2 * Math.sqrt(K * m);   // zeta = 1: the monotonic, no-crossing damping
-  const n = 1 + 4.5 * w;           // ramp steepness: 1 (even) -> 5.5 (centered peak)
-  const Tr = 0.15 + 0.24 * w;      // ramp length grows mildly, so heavy != frozen
+  const cCrit = 2 * Math.sqrt(K * m);
+  const n = 1 + 4.5 * w;
+  const Tr = 0.15 + 0.24 * w;
   const tAnt = an > 0 ? 0.10 + 0.12 * an : 0;
   const antDepth = an;
 
-  /* settle governs follow-through vs elasticity. A real spring oscillates and
-     decays; an animator's overshoot is a one-way trip — sail past once, ease
-     home. We get the animator's version with asymmetric damping: run underdamped
-     to earn the sail-past, then critically damp ("lock") the instant the motion
-     crests past the target, so it eases back without a second crossing.
-       'spring'  -> never lock (the physical spring, elastic wobble)
-       'single'  -> lock after the 1st crest (default; follow-through)
-        N        -> lock after N crests (room for 'settle: 2' etc. later) */
+  // Determine lock-after threshold for asymmetric damping.
+  // Physical springs oscillate natively ('spring'). Animator transitions typically cross 
+  // the target once and settle critically damped ('single').
   const lockAfter =
     settle === 'spring' ? Infinity :
     (settle === 'single' || settle == null) ? 1 :
@@ -74,41 +87,49 @@ export function simulate({
   const pts = [[0, 0, 0]];
 
   while (t < 6) {
-    // Reference position r(t): optional wind-back, then a weight-shaped ramp to 1.
     let r;
-    if (t < tAnt) r = -antDepth * rampN(t / tAnt, 2);
-    else {
+    if (t < tAnt) {
+      r = -antDepth * rampN(t / tAnt, 2);
+    } else {
       const u = clamp((t - tAnt) / Tr, 0, 1);
       r = -antDepth + (1 + antDepth) * rampN(u, n);
     }
     const prevV = v;
     const a = (K * (r - x) - cEff * v) / m;
-    v += a * dt; x += v * dt; t += dt;
+    v += a * dt; 
+    x += v * dt; 
+    t += dt;
     pts.push([t, x, v]);
 
-    // Lock detection: only after the mass has reached the target, count velocity
-    // sign flips (extrema of the oscillation) and switch to critical damping once
-    // we've allowed the configured number of them.
     if (!passedTarget && x >= 1) passedTarget = true;
+    
+    // Switch to critical damping upon reaching the specified extrema count.
     if (!locked && passedTarget && (prevV > 0) !== (v > 0)) {
-      if (++extrema >= lockAfter) { locked = true; cEff = cCrit; }
+      if (++extrema >= lockAfter) { 
+        locked = true; 
+        cEff = cCrit; 
+      }
     }
 
-    if (t > tAnt + Tr * 0.5 && Math.abs(x - 1) < 0.006 && Math.abs(v) < 0.15) { settleT = t; break; }
+    // Check rest condition: minimal distance from target and near-zero velocity.
+    if (t > tAnt + Tr * 0.5 && Math.abs(x - 1) < 0.006 && Math.abs(v) < 0.15) { 
+      settleT = t; 
+      break; 
+    }
   }
   if (settleT < 0) settleT = t;
 
   const posPts = pts.map(([tt, xx]) => [tt / settleT, xx]);
-  posPts[posPts.length - 1] = [1, 1];        // rest exactly at 1
+  posPts[posPts.length - 1] = [1, 1];
 
-  // Squash & stretch falls out of the same run. Stretch scales with normalized speed (so it's duration-independent and peaks where the object is fastest, mid-arc for heavy weight); squash kicks in only where it smashes past 1.
+  // Calculate deformation track. Stretch scales with speed. Squash applies past target boundary.
   const deformPts = pts.map(([tt, xx, vv]) => {
-    const vn = Math.abs(vv * settleT);       // dimensionless speed
+    const vn = Math.abs(vv * settleT);
     let d = 1 + vn * stretch;
     if (xx > 1) d -= (xx - 1) * squash;
-    return [tt / settleT, clamp(d, 0.5, 1.8)]; // keep 1/d finite and sane
+    return [tt / settleT, clamp(d, 0.5, 1.8)];
   });
-  deformPts[deformPts.length - 1] = [1, 1];  // rest exactly at 1 (no deform at rest)
+  deformPts[deformPts.length - 1] = [1, 1];
 
   return {
     points: simplify(posPts, 0.002),
@@ -117,23 +138,41 @@ export function simulate({
   };
 }
 
+/**
+ * Douglas-Peucker line simplification.
+ * Reduces the coordinate count for smaller CSS payload generation.
+ * 
+ * @param {Array} p - Array of coordinate pairs [x, y]
+ * @param {number} eps - Perpendicular distance threshold
+ * @returns {Array} Simplified array of coordinate pairs
+ */
 function simplify(p, eps) {
   if (p.length < 3) return p;
   const [ax, ay] = p[0], [bx, by] = p[p.length - 1];
   const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
   let idx = 0, max = 0;
+  
   for (let i = 1; i < p.length - 1; i++) {
     const [px, py] = p[i];
     const d = Math.abs(dy * px - dx * py + bx * ay - by * ax) / len;
     if (d > max) { max = d; idx = i; }
   }
-  if (max > eps) return simplify(p.slice(0, idx + 1), eps).slice(0, -1).concat(simplify(p.slice(idx), eps));
+  
+  if (max > eps) {
+    return simplify(p.slice(0, idx + 1), eps).slice(0, -1).concat(simplify(p.slice(idx), eps));
+  }
   return [p[0], p[p.length - 1]];
 }
 
-/* Resample the curve at uniform progress into a Float32Array. Then a frame lookup is an index and a lerp — no search, no binary search, no segment pointer to advance, no allocation. O(1) regardless of how many stops the curve has. It is keyed by progress, not time, so ONE table is shared by every element using those parameters, at any duration or delay. 256 floats = 1 KB per unique curve. */
 const LUT_N = 256;
 
+/**
+ * Resamples an arbitrary curve into a uniform Float32Array length of 256.
+ * Provides O(1) runtime progression lookups with linear interpolation.
+ * 
+ * @param {Array} points - Source coordinate pairs
+ * @returns {Float32Array} Uniformly sampled curve values
+ */
 function buildLUT(points) {
   const out = new Float32Array(LUT_N);
   let j = 0;
@@ -149,18 +188,23 @@ function buildLUT(points) {
 
 const cache = new Map();
 
+/**
+ * High-level curve generation and caching layer.
+ * 
+ * @param {Object} o - Animation parameters
+ * @returns {Object} Computed curve structure containing strings, duration, arrays, and LUTs
+ */
 export function curve(o = {}) {
-  // settle defaults to the global shaping default when a raw caller omits it, so
-  // "single" is genuinely the default everywhere, not just through the cascade.
   const settle = o.settle ?? CONFIG.defaults.settle;
-  // Position curve depends on the physics knobs and settle; the deform curve also depends on stretch/squash, so they all belong in the key.
   const key = `${o.weight}|${o.overshoot}|${o.anticipate}|${o.stretch}|${o.squash}|${settle}`;
   let hit = cache.get(key);
   if (hit) return hit;
+  
   const { points, deformPoints, seconds } = simulate({ ...o, settle });
   const keep = simplify(points, 0.0025);
   const deformKeep = simplify(deformPoints, 0.0025);
   const [dMin, dMax] = CONFIG.durationRange;
+  
   hit = {
     easing: 'linear(' + keep.map(([t, v]) => `${round(v, 4)} ${round(t * 100, 2)}%`).join(', ') + ')',
     duration: clamp(Math.round(seconds * 1000), dMin, dMax),
@@ -169,51 +213,43 @@ export function curve(o = {}) {
     lut: buildLUT(points),
     deformLut: buildLUT(deformPoints),
   };
+  
   cache.set(key, hit);
   return hit;
 }
 
-/* CSS custom-property export: the physics engine, minus the JS.
-
-   defineCSSCurve() runs a curve once and writes it to CSS custom properties, so
-   a plain stylesheet can drive momentum through transition/animation shorthands
-   with nothing on the frame — the curve is precomputed, so the running animation
-   is a pure compositor job.
-
-     defineCSSCurve({ weight: 0.6, overshoot: 0.3 });
-     //  :root { --wl-ease: linear(…); --wl-duration: 520ms; }
-
-     .card { transition: transform var(--wl-duration) var(--wl-ease); }
-     .card:hover { transform: translateY(-6px); }
-
-   Pass a `name` and the properties namespace cleanly (--wl-jelly-ease,
-   --wl-snap-ease …); pass a `target` to scope them to an element instead of
-   :root. Returns the computed strings plus revert(), which removes them again.
-
-   `squash` is the same single 0..~0.4 intensity play() uses. It only shapes the
-   deform track, never the position curve, so it leaves --*-ease untouched and
-   only adds --*-deform (a second easing string) when it's above zero. */
-
+/**
+ * Resolves a target node from varying input types.
+ * 
+ * @param {string|Element|null} target - A CSS selector, an Element, or null.
+ * @returns {Element|null} The resolved DOM element.
+ */
 function resolveTarget(target) {
   if (target == null)
     return typeof document !== 'undefined' ? document.documentElement : null;
   if (typeof target === 'string')
     return typeof document !== 'undefined' ? document.querySelector(target) : null;
-  return target;                       // assume an Element (anything with .style)
+  return target;
 }
 
 const toLinear = (pts) =>
   'linear(' + pts.map(([t, v]) => `${round(v, 4)} ${round(t * 100, 2)}%`).join(', ') + ')';
 
+/**
+ * Computes a curve and applies it to CSS custom properties on a specified target.
+ * Enables compositor-driven motion via standard stylesheet definitions.
+ * 
+ * @param {Object} config - Physics settings 
+ * @param {Object} options - CSS generation settings (name, target, prefix, explicit duration)
+ * @returns {Object} Handle containing the easing string, duration, generated variables, and a revert method
+ */
 export function defineCSSCurve(config = {}, {
   name = '',
   target = null,
   prefix = 'wl',
-  duration,                            // optional ms override; else the curve's own
+  duration,
 } = {}) {
   const ssI = config.squash || 0;
-  // accept either the engine key (anticipate) or the authoring alias (anticipation),
-  // and forward settle so a feel's shape is identical across all three consumers.
   const c = curve({
     weight: config.weight, overshoot: config.overshoot,
     anticipate: config.anticipate ?? config.anticipation,
@@ -222,12 +258,13 @@ export function defineCSSCurve(config = {}, {
   });
 
   const ms = duration != null ? Math.round(duration) : c.duration;
-  const slug = name ? `${prefix}-${name}` : prefix;   // --wl-ease  vs  --wl-jelly-ease
+  const slug = name ? `${prefix}-${name}` : prefix;
 
   const vars = {
     [`--${slug}-ease`]: c.easing,
     [`--${slug}-duration`]: `${ms}ms`,
   };
+  
   const deform = ssI > 0 ? toLinear(c.deformKeep) : null;
   if (deform) vars[`--${slug}-deform`] = deform;
 
@@ -244,23 +281,14 @@ export function defineCSSCurve(config = {}, {
   };
 }
 
-/* Stamp a whole palette of named curves onto one element in a single call —
-   the shape the named-curve use case usually wants:
-
-     defineCSSCurves({
-       snap:  { weight: 0.08, overshoot: 0.14 },
-       jelly: { weight: 0.9,  overshoot: 0.2, squash: 0.3 },
-       hero:  { weight: 0.5,  overshoot: 0.3, duration: 600 },
-     });
-     //  :root { --wl-snap-ease:…; --wl-jelly-ease:…; --wl-jelly-deform:…; --wl-hero-ease:…; … }
-
-   The map is name -> curve definition; each definition is the same physics
-   config defineCSSCurve() takes, and may fold in its own `duration` override.
-   `target` and `prefix` are shared across the set. Returns the individual
-   handles under .curves, the merged .vars, and one revert() for the lot. */
-
+/**
+ * Applies a collection of named curves to an element in a single batch operation.
+ * 
+ * @param {Object} curves - Map of curve names to configuration objects
+ * @param {Object} options - Options containing target element and prefix
+ * @returns {Object} Handle containing child curves, merged variables, and a batch revert method
+ */
 export function defineCSSCurves(curves = {}, { target = null, prefix = 'wl' } = {}) {
-  // Resolve once, up front: fail before writing anything, and share the node.
   const el = resolveTarget(target);
   if (!el) throw new Error(`williamslike: defineCSSCurves target not found (${String(target)})`);
 
@@ -279,27 +307,24 @@ export function defineCSSCurves(curves = {}, { target = null, prefix = 'wl' } = 
   };
 }
 
-/* ============================================================================
-   Authoring layer: configure() + feels + the declaration cascade.
-   The engine above never changes; everything here is about how a curve gets
-   *requested* — from HTML attributes, a feel name, or a JS override.
-   ========================================================================= */
-
-/* configure(): set the cascade root and engine-wide policy in one place.
-   Shaping defaults and durationRange affect baked curves, so we clear the
-   curve cache; timeScale and reducedMotion are applied downstream and don't. */
+/**
+ * Updates the global configuration root. 
+ * Modifying `defaults` or `durationRange` invalidates the calculation cache.
+ * 
+ * @param {Object} patch - Partial configuration object
+ * @returns {Object} A copy of the updated global configuration
+ */
 export function configure(patch = {}) {
   if (patch.defaults) Object.assign(CONFIG.defaults, patch.defaults);
   if (patch.timeScale != null) CONFIG.timeScale = patch.timeScale;
   if (patch.durationRange) CONFIG.durationRange = patch.durationRange;
   if (patch.reducedMotion) CONFIG.reducedMotion = patch.reducedMotion;
+  
   if (patch.defaults || patch.durationRange) cache.clear();
   return { ...CONFIG, defaults: { ...CONFIG.defaults } };
 }
 
-/* Public authoring vocabulary -> internal engine keys. The engine keeps its
-   original names; only the surface is renamed for clarity, so the two never
-   have to move in lockstep. */
+// Maps author-facing configuration aliases to internal engine keys.
 const ALIAS = {
   anticipation: 'anticipate',
   'start-scale': 'scale',
@@ -311,11 +336,15 @@ const aliasKeys = (obj) => {
   return o;
 };
 
-/* Feels: a named physics bundle. ONE registry, three consumers — the HTML
-   attribute (data-wl-feel), the JS call (play(el,{feel})), and the CSS export
-   (--wl-<name>-ease). Register once, reach it from whichever rung fits. */
 const feels = new Map();
 
+/**
+ * Registers a named configuration preset (a "feel").
+ * 
+ * @param {string} name - Identifier for the preset
+ * @param {Object} config - Physics configuration
+ * @returns {Object} Normalized preset mapping
+ */
 export function defineFeel(name, config = {}) {
   const norm = aliasKeys(config);
   feels.set(name, norm);
@@ -324,15 +353,19 @@ export function defineFeel(name, config = {}) {
 export const getFeel = (name) => (name ? feels.get(name) || null : null);
 export const feelNames = () => [...feels.keys()];
 
-// Built-ins (the old demo presets, now first-class). 'jelly' opts back into the
-// physical spring via settle — the exact cascade override the design turns on.
+// Standard built-in presets
 defineFeel('snap',  { weight: 0.08, overshoot: 0.14, anticipation: 0,    squash: 0    });
 defineFeel('toon',  { weight: 0.35, overshoot: 0.28, anticipation: 0.16, squash: 0.18 });
 defineFeel('jelly', { weight: 0.92, overshoot: 0.22, anticipation: 0.04, squash: 0.30, settle: 'spring' });
 defineFeel('sober', { weight: 0.40, overshoot: 0,    anticipation: 0,    squash: 0    });
 
-/* Stamp every registered feel (or a named subset) into CSS custom properties in
-   one call — the registry's third consumer, realized. */
+/**
+ * Batch exports the provided predefined feels to CSS custom properties.
+ * 
+ * @param {string[]} names - Array of feel identifiers to export. Defaults to all if omitted.
+ * @param {Object} opts - Additional options passed to defineCSSCurves
+ * @returns {Object} Batch definition handle
+ */
 export function exportFeels(names, opts = {}) {
   const list = names && names.length ? names : feelNames();
   const map = {};
@@ -340,24 +373,22 @@ export function exportFeels(names, opts = {}) {
   return defineCSSCurves(map, opts);
 }
 
-/* ---- The declaration mini-language ----
-   data-wl-tune and data-wl-stagger both read like inline CSS: "a: 1; b: 2px".
-   Values carry their own units so they look like the CSS they resolve into. */
-
+/**
+ * Value coercion layer for custom element-level attribute overrides.
+ */
 const coerceVal = (type, raw) => {
   switch (type) {
-    case 'px':   return parseFloat(raw);                       // "40px" | "40"
+    case 'px':   return parseFloat(raw);
     case 'ms':   return /(?:^|\d)s$/.test(raw) && !/ms$/.test(raw)
-                        ? parseFloat(raw) * 1000               // "0.5s" -> 500
-                        : parseFloat(raw);                     // "500ms" | "500"
+                        ? parseFloat(raw) * 1000
+                        : parseFloat(raw);
     case 'num':  return parseFloat(raw);
     case 'bool': return !/^(off|no|false|0)$/i.test(raw);
-    case 'flag': return !/^(off|none|false|0)$/i.test(raw);    // fade: off -> false
-    default:     return raw;                                   // 'word': keyword passthrough
+    case 'flag': return !/^(off|none|false|0)$/i.test(raw);
+    default:     return raw;
   }
 };
 
-// authoring property -> { internal key, value type }
 const TUNE_PROPS = {
   weight:            { k: 'weight',         t: 'num'  },
   overshoot:         { k: 'overshoot',      t: 'num'  },
@@ -373,9 +404,14 @@ const TUNE_PROPS = {
   'preserve-volume': { k: 'preserveVolume', t: 'bool' },
 };
 
-/* Parse a declaration string against a property schema. Unknown properties are
-   ignored (forward-compatible), so a stray `wl-tune="wobble: 3"` is a no-op, not
-   a crash. Exported because it's the single source of truth for the syntax. */
+/**
+ * Parses a CSS-like string syntax into a structured configuration object.
+ * Unknown property definitions are ignored for forward compatibility.
+ * 
+ * @param {string} str - Declaration string (e.g., "weight: 0.5; distance: 40px")
+ * @param {Object} schema - Validation rules identifying expected keys and variable types
+ * @returns {Object} Parsed configuration dictionary
+ */
 export function parseDecl(str, schema = TUNE_PROPS) {
   const out = {};
   if (!str) return out;
@@ -391,30 +427,36 @@ export function parseDecl(str, schema = TUNE_PROPS) {
   return out;
 }
 
-/* ---- Choreography (reserved axis) ----
-   Its own attribute so secondary-motion / sequence features from the todo have
-   room to grow without crowding tune. Today: `each` + `from`. */
 const STAGGER_PROPS = {
   each: { k: 'each', t: 'ms'   },
   from: { k: 'from', t: 'word' },
 };
 
-// Per-index delay multipliers for a group of n children.
+/**
+ * Computes multiplier indices for child element staggering.
+ * 
+ * @param {number} n - Total number of elements
+ * @param {string} from - Stagger origin algorithm (start, end, center, random)
+ * @returns {number[]} Array of computed iteration indices
+ */
 function staggerOrder(n, from = 'start') {
   const idx = Array.from({ length: n }, (_, i) => i);
   switch (from) {
     case 'end':    return idx.map((i) => n - 1 - i);
     case 'center': { const mid = (n - 1) / 2; return idx.map((i) => Math.abs(i - mid)); }
     case 'random': return idx.map(() => Math.random() * Math.max(1, n - 1));
-    // 'start' | 'index' | anything reserved -> natural order
     default:       return idx;
   }
 }
 
-/* ---- The cascade resolver ----
-   CONFIG.defaults -> feel -> tune -> JS override. Each stage overrides only the
-   properties it names; everything else falls through untouched. This is the
-   whole "properties cascade like CSS" idea, made literal. */
+/**
+ * Merges configuration parameters across the application cascade.
+ * Execution order applies values recursively: defaults -> preset -> inline tuning -> explicit js override.
+ * 
+ * @param {Element} el - Target DOM node
+ * @param {Object} override - Imperative JS config provided at execution time
+ * @returns {Object} Fully resolved configuration object
+ */
 function resolveOptions(el, override = {}) {
   const attr = (name) => (el && el.getAttribute ? el.getAttribute(name) : null);
   const motion = override.motion || attr('data-wl') || 'rise';
@@ -432,14 +474,7 @@ function resolveOptions(el, override = {}) {
   return { motion, ...base, ...(feel || {}), ...tune, ...override };
 }
 
-/* Introspection: return the fully-resolved options an element (plus optional JS
-   override) would animate with — the cascade, made visible. */
 export const resolve = (el, override = {}) => resolveOptions(el, override);
-
-/* Motions
-`axis` names the travel direction so squash & stretch can stretch ALONG it
-and squash across it (volume-preserving). Motions with no linear travel
-('pop','swing','fade') carry axis:null and simply ignore squash. */
 
 export const CALM_DISTANCE = 4;
 
@@ -454,10 +489,17 @@ export const motions = {
   fade:          { calm: 'fade',   axis: null, shape: () => null },
 };
 
-/* Compile a transform pair into literals + numbers, once. Per frame this becomes literal + number + literal + number ... no regex, no parsing, no template evaluation in the hot loop. */
 const NUM = /-?\d*\.?\d+/g;
 const tmplCache = new Map();
 
+/**
+ * Pre-compiles start/end transform states into string literals and numerical delta components.
+ * Bypasses string evaluation limits during high-frequency loop executions.
+ * 
+ * @param {string} from - Initial transform string
+ * @param {string} to - Final transform string
+ * @returns {Object} Template components optimized for tight loop concatenation
+ */
 function compile(from, to) {
   const key = from + '\u0000' + to;
   let hit = tmplCache.get(key);
@@ -466,11 +508,14 @@ function compile(from, to) {
   const toNums = (to.match(NUM) || []).map(Number);
   const lits = [], f = [], d = [];
   let last = 0, i = 0;
+  
   from.replace(NUM, (m, off) => {
     lits.push(from.slice(last, off));
     const a = parseFloat(m), b = toNums[i] ?? a;
-    f.push(a); d.push(b - a);
-    last = off + m.length; i++;
+    f.push(a); 
+    d.push(b - a);
+    last = off + m.length; 
+    i++;
     return m;
   });
   lits.push(from.slice(last));
@@ -480,48 +525,57 @@ function compile(from, to) {
   return hit;
 }
 
-/* Squash & stretch
-
-The deform curve is different from the position curve, so it can't ride a single easing string. Instead we bake: sample both curves at uniform progress, precompute scaleY = 1/scaleX per sample (volume preserved at bake time, so no runtime calc()/@property), and emit combined transform keyframes. A transform keyframe animation with linear timing still runs on the compositor, so this stays off the main thread in tiers 1 and 2. */
-
 const SS_SAMPLES = 20;
 
-// keepVolume=true compensates the cross axis (scaleY = 1/scaleX) so area is
-// conserved — the reason `squash` is one knob. keepVolume=false leaves the cross
-// axis at 1: pure elongation along the travel, volume not preserved.
+/**
+ * Computes deformation coordinate components, accommodating volume preservation configuration.
+ */
 function deformScale(axis, d, keepVolume = true) {
   const cross = keepVolume ? round(1 / d, 4) : 1;
   if (axis === 'x') return `${round(d, 4)},${cross}`;
-  return `${cross},${round(d, 4)}`;              // default: stretch along Y
+  return `${cross},${round(d, 4)}`;
 }
 
+/**
+ * Generates an array of normalized offset keyframes integrating positional curve definitions 
+ * with squash and stretch behavior into composite frames.
+ */
 function squashFrames(pairFrom, pairTo, c, axis, keepVolume = true) {
   const t = compile(pairFrom, pairTo);
   const { lut, deformLut } = c;
   const frames = [];
+  
   for (let i = 0; i < SS_SAMPLES; i++) {
     const p = i / (SS_SAMPLES - 1);
     const li = p * (LUT_N - 1);
-    let i0 = li | 0; if (i0 > LUT_N - 2) i0 = LUT_N - 2;
+    let i0 = li | 0; 
+    if (i0 > LUT_N - 2) i0 = LUT_N - 2;
+    
     const frac = li - i0;
     const pv = lut[i0] + (lut[i0 + 1] - lut[i0]) * frac;
     const dv = deformLut[i0] + (deformLut[i0 + 1] - deformLut[i0]) * frac;
 
     let s = t.lits[0];
-    for (let j = 0; j < t.from.length; j++) s += round(t.from[j] + t.delta[j] * pv, 3) + t.lits[j + 1];
+    for (let j = 0; j < t.from.length; j++) {
+      s += round(t.from[j] + t.delta[j] * pv, 3) + t.lits[j + 1];
+    }
     s += ` scale(${deformScale(axis, dv, keepVolume)})`;
     frames.push({ offset: p === 1 ? 1 : round(p, 4), transform: s });
   }
   return frames;
 }
 
+/**
+ * Alternative export structure enabling standalone CSS definition with zero runtime JS execution.
+ * Outputs generic keyframes relying solely on standard browser composition pipelines.
+ */
 export function generateSquashAndStretchCSS(options = {}) {
-  // Optional: a fully self-contained CSS route for people who want zero runtime JS. It emits its own @property + keyframes. Most callers should just set squash via data-wl-tune (or a feel) and ignore this.
   const { points, deformPoints, seconds } = simulate(options);
   const axis = options.axis === 'x' ? 'x' : 'y';
   const toLinear = (pts) => `linear(${pts.map(([t, v]) => `${round(v, 3)} ${round(t * 100, 1)}%`).join(', ')})`;
   const travel = options.distance ?? 300;
   const along = axis === 'x' ? 'X' : 'Y', cross = axis === 'x' ? 'Y' : 'X';
+  
   return {
     duration: `${seconds}s`,
     positionEasing: toLinear(points),
@@ -540,8 +594,6 @@ export function generateSquashAndStretchCSS(options = {}) {
   };
 }
 
-/* Reduced motion is a degradation, not a switch */
-
 const mq = typeof matchMedia !== 'undefined'
   ? matchMedia('(prefers-reduced-motion: reduce)')
   : { matches: false, addEventListener() {} };
@@ -550,8 +602,11 @@ export const prefersReduced = () => mq.matches;
 
 export const calmDuration = (d) => clamp(Math.round(5.2 * Math.pow(d, 0.63)), 120, 500);
 
+/**
+ * Calculates modified configuration values representing degraded functionality under 
+ * strict reduced-motion constraint scenarios.
+ */
 function calmDown(o, motion, authored) {
-  // element override -> motion's own calm strategy -> global policy default
   const mode = o.reduced || motion.calm || CONFIG.reducedMotion;
   if (mode === 'keep') return o;
   if (mode === 'off') return null;
@@ -561,7 +616,7 @@ function calmDown(o, motion, authored) {
     overshoot: 0,
     anticipate: 0,
     weight: Math.min(o.weight, 0.25),
-    squash: 0,                          // deformation is displacement
+    squash: 0,
     duration: calmDuration(authored),
   };
 
@@ -573,7 +628,7 @@ function calmDown(o, motion, authored) {
   return { ...base, fadeOnly: true };
 }
 
-/* Tier detection */
+/* Rendering tier detection and implementation */
 
 const probe = typeof document !== 'undefined' ? document.createElement('div') : null;
 const hasWAAPI = !!probe && typeof probe.animate === 'function';
@@ -586,15 +641,23 @@ if (hasWAAPI) {
   } catch { hasLinear = false; }
 }
 
+/**
+ * Rendering fallback architecture:
+ * Tier 1: WAAPI using native CSS linear() easing strings
+ * Tier 2: WAAPI fallback executing against explicit keyframe offsets
+ * Tier 3: RequestAnimationFrame custom update loop implementation
+ */
 export let TIER = !hasWAAPI ? 3 : hasLinear ? 1 : 2;
 export const forceTier = (t) => { TIER = t; };
-
-/* Tier 3: one rAF loop for the whole page. Carries an optional deform LUT so squash & stretch works here too (no WAAPI at all). */
 
 export const tracks = [];
 const owner = new Map();
 let raf = 0;
 
+/**
+ * Master execution loop servicing the Tier 3 animation path.
+ * Minimizes overhead by processing uniform interpolation checks across active tracked objects.
+ */
 function tick(now) {
   raf = 0;
   let live = 0;
@@ -634,17 +697,27 @@ function tick(now) {
 
     if (tr.fade) {
       if (p >= tr.fadeAt) tr.el.style.opacity = '1';
-      else { const q = 1 - p / tr.fadeAt; tr.el.style.opacity = String(Math.round((1 - q * q * q) * 1000) / 1000); }
+      else { 
+        const q = 1 - p / tr.fadeAt; 
+        tr.el.style.opacity = String(Math.round((1 - q * q * q) * 1000) / 1000); 
+      }
     }
 
-    if (done) { tr.el.style.willChange = ''; owner.delete(tr.el); }
-    else tracks[live++] = tr;
+    if (done) { 
+      tr.el.style.willChange = ''; 
+      owner.delete(tr.el); 
+    } else {
+      tracks[live++] = tr;
+    }
   }
 
   tracks.length = live;
   if (live) raf = requestAnimationFrame(tick);
 }
 
+/**
+ * Enqueues a new item onto the Tier 3 interpolation loop.
+ */
 function schedule(el, pair, c, duration, delay, fade, axis, keepVolume = true) {
   const prev = owner.get(el);
   if (prev) prev.dead = true;
@@ -671,11 +744,6 @@ function schedule(el, pair, c, duration, delay, fade, axis, keepVolume = true) {
   if (!raf) raf = requestAnimationFrame(tick);
 }
 
-/* play()
-   Options come from the cascade (CONFIG.defaults -> feel -> tune -> override),
-   so play(el) reads the element's attributes and play(el, {...}) layers a JS
-   override on top. Same resolution either way. */
-
 const bakedFrames = (t, keep) =>
   keep.map(([time, v]) => {
     let s = t.lits[0];
@@ -683,6 +751,14 @@ const bakedFrames = (t, keep) =>
     return { offset: clamp(time, 0, 1), transform: s };
   });
 
+/**
+ * Initializes and dispatches an animation sequence against a target node.
+ * Evaluates the required cascade priority and determines execution via the underlying WAAPI tiers 
+ * or internal simulation queue.
+ * 
+ * @param {Element} el - Output DOM element
+ * @param {Object} override - Imperative JS config values applied above data-attribute declarations
+ */
 export function play(el, override = {}) {
   let o = resolveOptions(el, override);
   const motion = motions[o.motion] || motions.rise;
@@ -692,28 +768,35 @@ export function play(el, override = {}) {
       weight: o.weight, overshoot: o.overshoot, anticipate: o.anticipate, settle: o.settle,
     }).duration;
     o = calmDown(o, motion, authored);
-    if (!o) { el.style.opacity = '1'; el.style.transform = 'none'; return; }
+    if (!o) { 
+      el.style.opacity = '1'; 
+      el.style.transform = 'none'; 
+      return; 
+    }
   }
 
   const pair = o.fadeOnly ? null : motion.shape(o.distance, o.scale);
-  // `squash` is a single 0..~0.4 intensity. It drives both the stretch-with-speed and the squash-on-impact so one knob reads as "how deformable is this thing". 0.18 reproduces the tuned defaults (stretch 0.02, impact-squash 0.9).
   const ssI = o.squash || 0;
   const ssAxis = (ssI > 0 && motion.axis && pair) ? motion.axis : null;
   const keepVolume = o.preserveVolume !== false;
+  
   const c = curve({
     weight: o.weight, overshoot: o.overshoot, anticipate: o.anticipate,
     stretch: 0.111 * ssI, squash: 5 * ssI, settle: o.settle,
   });
-  // timeScale is a house/debug tempo multiplier applied after the curve — it's
-  // allowed to run past durationRange (e.g. 4x slow-mo for inspection).
+  
   const duration = Math.round((o.duration ?? c.duration) * CONFIG.timeScale);
 
-  if (TIER === 3) { schedule(el, pair, c, duration, o.delay, o.fade, ssAxis, keepVolume); return; }
+  if (TIER === 3) { 
+    schedule(el, pair, c, duration, o.delay, o.fade, ssAxis, keepVolume); 
+    return; 
+  }
 
   if (pair) {
     const [from, to] = pair;
     const timing = { duration, delay: o.delay, fill: 'both' };
     let a;
+    
     if (ssAxis) {
       a = el.animate(squashFrames(from, to, c, ssAxis, keepVolume), { ...timing, easing: 'linear' });
     } else if (TIER === 1) {
@@ -721,8 +804,10 @@ export function play(el, override = {}) {
     } else {
       a = el.animate(bakedFrames(compile(from, to), c.keep), { ...timing, easing: 'linear' });
     }
+    
     a.finished.then(() => { a.commitStyles(); a.cancel(); }).catch(() => {});
   }
+  
   if (o.fade) {
     el.animate([{ opacity: 0 }, { opacity: 1 }], {
       duration: Math.min(duration, 380), delay: o.delay, fill: 'both',
@@ -730,9 +815,6 @@ export function play(el, override = {}) {
     });
   }
 }
-
-/* Triggers
-   Nothing here ever hides content via CSS. The from-state exists only inside the animation, so a blocked script, a thrown error or a suppressed animation still leaves the page readable. */
 
 let io = null;
 
@@ -742,11 +824,20 @@ function fire(el) {
     const kids = [...el.children];
     const order = staggerOrder(kids.length, stag.from);
     kids.forEach((kid, i) => play(kid, { delay: order[i] * stag.each }));
-  } else play(el);
+  } else {
+    play(el);
+  }
 }
 
+/**
+ * Recursively locates components matching trigger criteria within a root DOM subtree,
+ * establishing internal observers and interaction event bindings.
+ * 
+ * @param {Document|Element} root - Search origin point
+ */
 export function register(root = document) {
   const els = [...root.querySelectorAll('[data-wl], [data-wl-stagger]')];
+  
   io ||= new IntersectionObserver((entries) => {
     for (const e of entries) {
       if (!e.isIntersecting) continue;
