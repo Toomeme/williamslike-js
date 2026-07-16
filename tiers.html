@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>kinetic — tiers</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{--paper:#DDE1DC;--paper-2:#D2D7D1;--ink:#161A17;--ink-3:#6C736B;--line:#B7BEB6;
+    --signal:#2B26D8;--alarm:#E8482F;--ok:#1B7A4B;
+    --rule:1px solid var(--line);--mono:"IBM Plex Mono",ui-monospace,monospace;--disp:"Space Grotesk",system-ui,sans-serif}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--paper);color:var(--ink);font-family:var(--disp);line-height:1.45;padding:clamp(18px,4vw,44px);
+    background-image:linear-gradient(var(--paper-2) 1px,transparent 1px),linear-gradient(90deg,var(--paper-2) 1px,transparent 1px);
+    background-size:28px 28px}
+  .wrap{max-width:1080px;margin:0 auto}
+  header{border-bottom:2px solid var(--ink);padding-bottom:14px}
+  h1{font-size:clamp(26px,4vw,42px);font-weight:700;letter-spacing:-.035em;line-height:1.05}
+  h1 em{font-style:normal;color:var(--signal)}
+  .sub{font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-top:10px}
+
+  .tiers{display:grid;grid-template-columns:repeat(3,1fr);border:var(--rule);border-top:none}
+  @media(max-width:760px){.tiers{grid-template-columns:1fr}}
+  .tier{padding:16px 18px;cursor:pointer;background:var(--paper);border:none;text-align:left;font-family:var(--disp);
+    text-transform:none;letter-spacing:0;color:var(--ink)}
+  .tier+.tier{border-left:var(--rule)}
+  @media(max-width:760px){.tier+.tier{border-left:none;border-top:var(--rule)}}
+  .tier:hover{background:var(--paper-2)}
+  .tier[aria-pressed=true]{background:var(--ink);color:var(--paper)}
+  .tier[aria-pressed=true] .m{color:#787F76}
+  .tier .n{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
+  .tier[aria-pressed=true] .n{color:#6FDCA0}
+  .tier .h{font-size:16px;font-weight:600;letter-spacing:-.02em;margin:3px 0 4px}
+  .tier .m{font-size:12px;color:var(--ink-3);line-height:1.35}
+
+  .bar{border:var(--rule);border-top:none;padding:14px 18px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+  button{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding:9px 15px;
+    border:1px solid var(--ink);background:var(--paper);color:var(--ink);cursor:pointer}
+  button:hover{background:var(--ink);color:var(--paper)}
+  button:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+  button#loop[aria-pressed=true]{background:var(--signal);border-color:var(--signal);color:#fff}
+  .count{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+  .count b{color:var(--signal);min-width:34px;display:inline-block;text-align:right}
+  input[type=range]{width:160px;-webkit-appearance:none;appearance:none;background:transparent;cursor:ew-resize}
+  input[type=range]:focus-visible{outline:2px solid var(--signal);outline-offset:4px}
+  input[type=range]::-webkit-slider-runnable-track{height:2px;background:var(--ink)}
+  input[type=range]::-moz-range-track{height:2px;background:var(--ink)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;margin-top:-5.5px;background:var(--signal);border-radius:50%}
+  input[type=range]::-moz-range-thumb{width:13px;height:13px;border:none;background:var(--signal);border-radius:50%}
+
+  .meters{border:var(--rule);border-top:none;background:var(--ink);color:#C9CEC7;padding:16px 18px;
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px;font-family:var(--mono)}
+  .meter .k{font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:#787F76}
+  .meter .v{font-size:24px;font-weight:600;letter-spacing:-.02em;margin-top:2px}
+  .good{color:#6FDCA0}.warn{color:#FFC46B}.bad{color:#FF8E7A}
+
+  #field{border:var(--rule);border-top:none;background:#fff;padding:16px;display:flex;flex-wrap:wrap;gap:4px;
+    min-height:260px;align-content:flex-start}
+  .dot{width:12px;height:12px;background:var(--signal);flex:0 0 auto}
+  .dot:nth-child(4n){background:var(--ink)}
+  .dot:nth-child(7n){background:var(--alarm)}
+  footer{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);margin-top:16px;letter-spacing:.05em;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>One curve. <em>Three</em> renderers.</h1>
+    <p class="sub">Same precomputation · only the delivery changes</p>
+  </header>
+
+  <div class="tiers">
+    <button class="tier" data-tier="1" aria-pressed="true">
+      <div class="n">Tier 1 · default</div>
+      <div class="h">linear() easing</div>
+      <div class="m">Two keyframes. The curve lives in the easing string. Compositor.</div>
+    </button>
+    <button class="tier" data-tier="2" aria-pressed="false">
+      <div class="n">Tier 2 · iOS &lt; 17.2</div>
+      <div class="h">Baked keyframes</div>
+      <div class="m">Curve baked into keyframe offsets. Still compositor.</div>
+    </button>
+    <button class="tier" data-tier="3" aria-pressed="false">
+      <div class="n">Tier 3 · no WAAPI</div>
+      <div class="h">Shared rAF loop</div>
+      <div class="m">O(1) LUT lookup, precompiled transforms. Main thread.</div>
+    </button>
+  </div>
+
+  <div class="bar">
+    <button id="replay">Replay</button>
+    <button id="loop" aria-pressed="false">Loop</button>
+    <label class="count" for="n">Elements <input id="n" type="range" min="50" max="1500" step="50" value="400"><b id="nv">400</b></label>
+  </div>
+
+  <div class="meters">
+    <div class="meter"><div class="k">Frame rate</div><div class="v" id="m-fps">—</div></div>
+    <div class="meter"><div class="k">Worst frame</div><div class="v" id="m-worst">—</div></div>
+    <div class="meter"><div class="k">Our JS per frame</div><div class="v" id="m-js">—</div></div>
+    <div class="meter"><div class="k">Curves simulated</div><div class="v" id="m-curves">—</div></div>
+  </div>
+
+  <div id="field"></div>
+
+  <footer>
+    Tier 1 and 2 report ~0.00ms of our JS per frame because there is none — the compositor owns the animation.<br>
+    Tier 3 is the honest cost of doing it by hand. Push the element count and watch where it breaks.
+  </footer>
+</div>
+<script type="module">
+import { curve, forceTier, tracks, play as kPlay } from './kinetic.js';
+
+const $ = id => document.getElementById(id);
+
+/* ---------- JS execution meter hook ---------- */
+let jsMs = 0;
+const origRaf = window.requestAnimationFrame;
+window.requestAnimationFrame = function(cb) {
+  return origRaf(function(now) {
+    const t0 = performance.now();
+    cb(now);
+    const dt = performance.now() - t0;
+    if (cb !== meter) jsMs = jsMs === 0 ? dt : (jsMs * 0.9 + dt * 0.1);
+  });
+};
+
+/* ---------- meters ---------- */
+let last = performance.now(), frames = 0, acc = 0, worst = 0;
+function meter(now) {
+  const dt = now - last; last = now;
+  frames++; acc += dt;
+  if (dt > worst && frames > 3) worst = dt;
+  if (acc >= 500) {
+    const fps = Math.round(frames / (acc / 1000));
+    const f = $('m-fps'); f.textContent = fps;
+    f.className = 'v ' + (fps >= 55 ? 'good' : fps >= 40 ? 'warn' : 'bad');
+    const w = $('m-worst'); w.textContent = worst.toFixed(1) + 'ms';
+    w.className = 'v ' + (worst < 20 ? 'good' : worst < 34 ? 'warn' : 'bad');
+    const j = $('m-js'); j.textContent = jsMs.toFixed(2) + 'ms';
+    j.className = 'v ' + (jsMs < 2 ? 'good' : jsMs < 6 ? 'warn' : 'bad');
+    frames = 0; acc = 0; worst = 0;
+  }
+  origRaf(meter);
+}
+origRaf(meter);
+
+/* ---------- stage setup ---------- */
+let N = 400, looping = false, timer = null;
+const field = $('field');
+
+function build() {
+  field.innerHTML = '';
+  for (let i = 0; i < N; i++) {
+    const d = document.createElement('div');
+    d.className = 'dot';
+    field.appendChild(d);
+  }
+  $('m-curves').textContent = N;
+}
+
+function playAll() {
+  for (let i = 0; i < field.children.length; i++) {
+    const d = field.children[i];
+    d.getAnimations().forEach(a => a.cancel());
+    d.style.cssText = '';
+    kPlay(d, {
+      motion: 'drop',
+      distance: 24,
+      delay: (i % 40) * 12,
+      duration: 700
+    });
+  }
+}
+
+/* ---------- controls ---------- */
+for (const b of document.querySelectorAll('.tier')) {
+  b.onclick = () => {
+    forceTier(+b.dataset.tier);
+    for (const x of document.querySelectorAll('.tier')) {
+        x.setAttribute('aria-pressed', x === b);
+    }
+    for (const t of tracks) t.dead = true;
+    tracks.length = 0;
+    
+    for (const d of field.children) {
+      d.getAnimations().forEach(a => a.cancel());
+      d.style.cssText = '';
+      d.className = 'dot';
+    }
+    jsMs = 0;
+    playAll();
+    loopOn();
+  };
+}
+
+$('n').oninput = e => { 
+  N = +e.target.value; 
+  $('nv').textContent = N; 
+  build(); 
+  playAll(); 
+};
+
+$('replay').onclick = () => { playAll(); loopOn(); };
+$('loop').onclick = e => { 
+  looping = !looping; 
+  e.currentTarget.setAttribute('aria-pressed', looping); 
+  loopOn(); 
+};
+
+function loopOn() {
+  clearTimeout(timer);
+  if (looping) timer = setTimeout(() => { playAll(); loopOn(); }, 1700);
+}
+
+build();
+setTimeout(playAll, 250);
+</script>
+</body>
+</html>

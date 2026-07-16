@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>kinetic — reduced motion</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#DDE1DC;--paper-2:#D2D7D1;--ink:#161A17;--ink-3:#6C736B;--line:#B7BEB6;
+    --signal:#2B26D8;--alarm:#E8482F;--calm:#1B7A4B;
+    --rule:1px solid var(--line);
+    --mono:"IBM Plex Mono",ui-monospace,monospace;
+    --disp:"Space Grotesk",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--paper);color:var(--ink);font-family:var(--disp);line-height:1.45;
+    padding:clamp(18px,4vw,44px);
+    background-image:linear-gradient(var(--paper-2) 1px,transparent 1px),linear-gradient(90deg,var(--paper-2) 1px,transparent 1px);
+    background-size:28px 28px}
+  .wrap{max-width:1080px;margin:0 auto}
+  header{border-bottom:2px solid var(--ink);padding-bottom:14px}
+  h1{font-size:clamp(26px,4vw,42px);font-weight:700;letter-spacing:-.035em;line-height:1.05}
+  h1 em{font-style:normal;color:var(--calm)}
+  .sub{font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-top:10px}
+
+  .bar{border:var(--rule);border-top:none;padding:14px 18px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--paper)}
+  button{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding:9px 15px;
+    border:1px solid var(--ink);background:var(--paper);color:var(--ink);cursor:pointer}
+  button:hover{background:var(--ink);color:var(--paper)}
+  button:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+  button[aria-pressed=true]{background:var(--calm);border-color:var(--calm);color:#fff}
+  .os{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+  .os b{color:var(--ink)}
+
+  .cols{display:grid;grid-template-columns:1fr 1fr;border:var(--rule);border-top:none}
+  @media(max-width:820px){.cols{grid-template-columns:1fr}}
+  .col{padding:18px;min-width:0}
+  .col+.col{border-left:var(--rule)}
+  @media(max-width:820px){.col+.col{border-left:none;border-top:var(--rule)}}
+  .col h2{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--ink-3);margin-bottom:4px;display:flex;justify-content:space-between}
+  .col.on h2 span:first-child{color:var(--calm)}
+  .col .desc{font-size:12.5px;color:var(--ink-3);margin-bottom:14px;min-height:34px;line-height:1.35}
+
+  /* a plausible page fragment, not abstract boxes */
+  .card{background:#fff;border:1px solid var(--ink);padding:14px 15px;margin-bottom:9px}
+  .card .k{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+  .card .n{font-family:var(--mono);font-size:26px;font-weight:600;letter-spacing:-.03em;margin-top:2px}
+  .card .n em{font-style:normal;font-size:12px;color:var(--calm);margin-left:6px;letter-spacing:0}
+  .card:nth-child(2){background:var(--ink);color:var(--paper)}
+  .card:nth-child(2) .k{color:#787F76}
+  .card:nth-child(3){border-color:var(--signal)}
+  .card:nth-child(3) .n{color:var(--signal)}
+
+  svg.scope{width:100%;height:auto;display:block;background:#fff;border:var(--rule);margin-top:14px}
+  .band{fill:var(--alarm);opacity:.07}
+  .axis{stroke:var(--ink);stroke-width:1}
+  .trace{fill:none;stroke-width:2.25;stroke-linejoin:round;stroke-linecap:round}
+  .lbl{font-family:var(--mono);font-size:9px;fill:var(--ink-3)}
+
+  table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11.5px;margin-top:0}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid #2A2F2A}
+  th{color:#787F76;font-weight:500;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase}
+  td:first-child{color:#787F76}
+  .drop{color:#FF8E7A}.keepv{color:#6FDCA0}.trim{color:#FFC46B}
+  .policy{border:var(--rule);border-top:none;background:var(--ink);color:#C9CEC7;padding:18px}
+  .policy h3{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#787F76;margin-bottom:6px}
+  footer{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);margin-top:16px;letter-spacing:.05em;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Reduced motion is a <em>degradation</em>,<br>not a kill switch.</h1>
+    <p class="sub">Same content · same stagger · same intent · no vestibular load</p>
+  </header>
+
+  <div class="bar">
+    <button id="replay">Replay both</button>
+    <button id="sim" aria-pressed="false">Simulate reduced motion</button>
+    <span class="os">Your OS currently requests: <b id="os">—</b></span>
+  </div>
+
+  <div class="cols">
+    <div class="col" id="col-full">
+      <h2><span>Full</span><span id="t-full">—</span></h2>
+      <p class="desc">Weight 0.4 · overshoot 0.3 · anticipation 0.12 · 28px travel</p>
+      <div class="stack" id="stack-full"></div>
+      <svg class="scope" viewBox="0 0 420 220" aria-hidden="true">
+        <rect class="band" x="0" y="0" width="420" height="44"/>
+        <rect class="band" x="0" y="176" width="420" height="44"/>
+        <line class="axis" x1="0" y1="176" x2="420" y2="176"/>
+        <line class="axis" x1="0" y1="44" x2="420" y2="44" stroke-dasharray="4 4"/>
+        <text class="lbl" x="6" y="39">1.0</text><text class="lbl" x="6" y="191">0.0</text>
+        <path class="trace" id="trace-full" stroke="#2B26D8"/>
+      </svg>
+    </div>
+
+    <div class="col" id="col-calm">
+      <h2><span>Calm</span><span id="t-calm">—</span></h2>
+      <p class="desc">Overshoot and anticipation removed · travel clamped to 4px · fade and stagger preserved</p>
+      <div class="stack" id="stack-calm"></div>
+      <svg class="scope" viewBox="0 0 420 220" aria-hidden="true">
+        <rect class="band" x="0" y="0" width="420" height="44"/>
+        <rect class="band" x="0" y="176" width="420" height="44"/>
+        <line class="axis" x1="0" y1="176" x2="420" y2="176"/>
+        <line class="axis" x1="0" y1="44" x2="420" y2="44" stroke-dasharray="4 4"/>
+        <text class="lbl" x="6" y="39">1.0</text><text class="lbl" x="6" y="191">0.0</text>
+        <path class="trace" id="trace-calm" stroke="#1B7A4B"/>
+      </svg>
+    </div>
+  </div>
+
+  <div class="policy">
+    <h3>What the degradation does</h3>
+    <table>
+      <tr><th>Property</th><th>Full</th><th>Calm</th><th>Why</th></tr>
+      <tr><td>overshoot</td><td>0.30</td><td class="drop">0 — dropped</td><td>Oscillation. The primary trigger.</td></tr>
+      <tr><td>anticipation</td><td>0.12</td><td class="drop">0 — dropped</td><td>Reversal of direction.</td></tr>
+      <tr><td>travel</td><td>28px</td><td class="trim">4px — clamped</td><td>Large-area displacement.</td></tr>
+      <tr><td>rotation / parallax</td><td>allowed</td><td class="drop">fade only</td><td>No small, safe amount of spin exists.</td></tr>
+      <tr><td>weight</td><td>0.40</td><td class="trim">0.25 — capped</td><td>No long drifting settle.</td></tr>
+      <tr><td>opacity fade</td><td>yes</td><td class="keepv">yes — kept</td><td>Not a vestibular trigger.</td></tr>
+      <tr><td>stagger</td><td>70ms</td><td class="keepv">70ms — kept</td><td>Carries sequence. That's meaning, not decoration.</td></tr>
+    </table>
+  </div>
+
+  <footer>
+    Nothing on this page is hidden by CSS. The from-state exists only inside the animation,<br>
+    so a failed script, a blocked script or a suppressed animation still leaves the content visible.
+  </footer>
+</div>
+<script type="module">
+import { curve } from './kinetic.js';
+
+const $ = id => document.getElementById(id);
+
+/* the two configurations */
+const FULL={weight:.4,overshoot:.3,anticipate:.12,distance:28};
+const CALM={weight:.25,overshoot:0,anticipate:0,distance:4,duration:260};
+const STAGGER=70;
+
+const CARDS=[
+  ['Sessions','12,480','+8.2%'],
+  ['Median latency','214ms','−31ms'],
+  ['Error rate','0.04%','−0.01'],
+];
+const stack=el=>{
+  el.innerHTML=CARDS.map(([k,n,d])=>
+    `<div class="card"><div class="k">${k}</div><div class="n">${n}<em>${d}</em></div></div>`).join('');
+  return [...el.children];
+};
+const fullCards=stack($('stack-full'));
+const calmCards=stack($('stack-calm'));
+
+const mq=matchMedia('(prefers-reduced-motion: reduce)');
+const paint=()=>{ $('os').textContent = mq.matches ? 'reduce' : 'no-preference'; };
+mq.addEventListener('change',paint); paint();
+
+let sim=false;
+const X=t=>t*420, Y=v=>176-v*132;
+const path=p=>p.map(([t,v],i)=>`${i?'L':'M'}${X(t).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+
+function run(cards, cfg, label){
+  const c=curve(cfg);
+  const dur=cfg.duration ?? c.duration;
+  $(label).textContent = `${dur}ms`;
+  cards.forEach((el,i)=>{
+    el.getAnimations().forEach(a=>a.cancel());
+    const from=`translate3d(0px,${cfg.distance}px,0px)`;
+    if(cfg.distance!==0)
+      el.animate([{transform:from},{transform:'translate3d(0px,0px,0px)'}],
+        {duration:dur,delay:i*STAGGER,fill:'both',easing:c.easing});
+    el.animate([{opacity:0},{opacity:1}],
+      {duration:Math.min(dur,380),delay:i*STAGGER,fill:'both',easing:'cubic-bezier(.2,0,.2,1)'});
+  });
+  return c;
+}
+
+function play(){
+  // The left column always shows the full curve, for reference.
+  const cf=curve(FULL);
+  $('trace-full').setAttribute('d',path(cf.points));
+  const cc=curve(CALM);
+  $('trace-calm').setAttribute('d',path(cc.points));
+
+  const reduced = mq.matches || sim;
+  // Left column obeys the preference — this is what a real page does.
+  run(fullCards, reduced ? CALM : FULL, 't-full');
+  // Right column always shows the calm variant, for comparison.
+  run(calmCards, CALM, 't-calm');
+
+  $('col-full').classList.toggle('on', reduced);
+  $('t-full').textContent += reduced ? ' · degraded' : '';
+}
+
+$('replay').onclick=play;
+$('sim').onclick=e=>{ sim=!sim; e.currentTarget.setAttribute('aria-pressed',sim); play(); };
+setTimeout(play,200);
+</script>
+</body>
+</html>
