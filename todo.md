@@ -1,11 +1,7 @@
 # To-do
 
 ## Crucial Features
-Potentially an API refactor. data-attributes are good, but the more features we add, the more cumbersome the library becomes. Maybe a better path would be to keep pre-baked motions into the data-anim attribute, while fine tuning would be in a wl-properties attribute. We should also look into renaming properties to make their function crystal clear
-
 Expounded on in #nice-to-have-experimental, some way to positionally transform a target div, either by animating in from an edge of the screen, or between authored points.
-
-Export the easing to CSS variables, letting developers use the physics engine without writing JS. Have an initialization method that takes a configuration, generates the curve, and injects it into the :root or a specific element as --wl-ease: linear and --wl-duration: 400ms.
 
 ## Important Features
 Secondary motion, the ability to designate a child div as an inheritor of motion, and have it follow the parent div's curve on a delay. 
