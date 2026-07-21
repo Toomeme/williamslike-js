@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>williamslike — Unified Demo</title>
+<title>williamslike — Demo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -14,15 +14,36 @@
 
   <!-- MAIN HEADER -->
   <header class="main-head">
-    <h1>Williamslike <em>Motion</em>.</h1>
+    <h1>Williams-like <em>Expression</em>.</h1>
     <p class="tag">One precomputed curve engine handling physical momentum, squash &amp; stretch, accessibility, and rendering tier graceful degradation.</p>
   </header>
 
-  <!-- 1. CONFIGURATOR & STAGE -->
+  <!-- DECLARATIVE -->
+  <section id="declare-sec">
+    <header>
+      <h2 class="sec-title">Declarative <em>: attributes + one register()</em></h2>
+      <p class="sec-desc">Add data-wl attributes to markup, call register() once. No per-element JavaScript.</p>
+    </header>
+
+    <div class="activate">
+      <span class="cm">// one call activates every data-wl element on the page</span><br>
+      <b>import</b> { register } <b>from</b> <span class="v">'./williamslike.js'</span>;<br>
+      <b>register</b>();
+    </div>
+
+    <div class="declare" id="declare"></div>
+
+    <div class="bar" style="border-top:none;">
+      <button id="replay-declare">Replay Entrances</button>
+      <span class="tag" style="margin-left:auto;text-transform:none;">click / hover cells are interactive, give them a try</span>
+    </div>
+  </section>
+
+  <!-- CONFIGURATOR & STAGE -->
   <section id="config">
     <header>
-      <h2 class="sec-title">1. The Curve &amp; Deformation</h2>
-      <p class="sec-desc">Anticipation, overshoot, weight, volume-preserving squash &amp; stretch — and settle: follow-through vs spring.</p>
+      <h2 class="sec-title">The Physics Bench <em>: what a feel is made of</em></h2>
+      <p class="sec-desc">Dial the curve in live, then copy the one-line data-wl-tune it resolves to. Anticipation, overshoot, weight, volume-preserving squash &amp; stretch, and settle: follow-through vs spring.</p>
     </header>
 
     <div class="grid">
@@ -42,6 +63,7 @@
           <circle class="head" id="head" cx="0" cy="240" r="5"></circle>
         </svg>
         <div class="readout" id="css">…</div>
+        <div class="readout" id="decl" style="margin-top:8px;">…</div>
         <div class="stats">
           <span>duration <b id="s-dur">—</b></span>
           <span>pos stops <b id="s-stops">—</b></span>
@@ -102,11 +124,11 @@
     </div>
   </section>
 
-  <!-- 2. REDUCED MOTION -->
+  <!-- REDUCED MOTION -->
   <section id="accessibility">
     <header>
-      <h2 class="sec-title">2. Reduced Motion (Accessibility)</h2>
-      <p class="sec-desc">A degradation, not a kill switch. Stagger and intent are preserved without vestibular triggers.</p>
+      <h2 class="sec-title">Reduced Motion (Accessibility)</h2>
+      <p class="sec-desc">Motion degradation, not a kill switch. Stagger and intent are preserved without vestibular triggers.</p>
     </header>
 
     <div class="bar">
@@ -130,10 +152,10 @@
     </div>
   </section>
 
-  <!-- 3. RENDERING TIERS -->
+  <!-- RENDERING TIERS -->
   <section id="performance" style="border-bottom:none;">
     <header>
-      <h2 class="sec-title">3. Rendering Tiers (Performance)</h2>
+      <h2 class="sec-title">Rendering Tiers (Performance)</h2>
       <p class="sec-desc">Test how the library falls back through rendering strategies under load.</p>
     </header>
 
@@ -180,13 +202,96 @@
 </div>
 
 <script type="module">
-import williamslike, { curve, play as runAnimation, forceTier, tracks, generateSquashAndStretchCSS, getFeel, exportFeels } from './williamslike.js';
+import williamslike, { curve, play as runAnimation, register, trigger, forceTier, tracks, generateSquashAndStretchCSS, getFeel, exportFeels } from './williamslike.js';
 
 const $ = id => document.getElementById(id);
 const reduceMedia = matchMedia('(prefers-reduced-motion: reduce)');
 
 /* =========================================================================
-   1. CONFIGURATOR & STAGE (Bench & Squash)
+   DECLARATIVE (HERO) — pure attributes, activated by register()
+   The whole section is markup + a single register() call. Nothing here passes
+   options to play(); every element animates from its own data-wl-* attributes.
+   ========================================================================= */
+const declareRoot = $('declare');
+const autoEls = [], staggerEls = [];
+
+// exact data-wl markup for a live element, shown verbatim (attributes only).
+const markup = el => {
+  const tag = el.tagName.toLowerCase();
+  const attrs = [...el.attributes]
+    .filter(a => a.name.startsWith('data-wl'))
+    .map(a => ` <span class="a">${a.name}</span>="<span class="v">${a.value}</span>"`)
+    .join('');
+  const inner = el.textContent.trim();
+  return `&lt;${tag}${attrs}&gt;${inner}&lt;/${tag}&gt;`;
+};
+
+function makeCard({ rung, on, motion, feel, tune, label, cls }) {
+  const card = document.createElement('div');
+  card.className = 'demo' + (on === 'click' || on === 'hover' ? ' interactive' : '');
+  const box = document.createElement('div');
+  box.className = 'box' + (cls ? ' ' + cls : '');
+  box.textContent = label;
+  box.setAttribute('data-wl', motion);
+  if (feel) box.setAttribute('data-wl-feel', feel);
+  if (tune) box.setAttribute('data-wl-tune', tune);
+  box.setAttribute('data-wl-on', on);
+
+  card.innerHTML =
+    `<div class="cap"><span class="rung">${rung}</span><span class="on">on: ${on}</span></div>` +
+    `<div class="out"></div>`;
+  card.querySelector('.out').appendChild(box);
+  const code = document.createElement('code');
+  code.innerHTML = markup(box);
+  card.appendChild(code);
+  declareRoot.appendChild(card);
+
+  if (on === 'load' || on === 'enter') autoEls.push(box);
+  // click/hover cards replay themselves via their own listener (register wires it)
+  return box;
+}
+
+[
+  { rung: 'Rung 1 · motion',        on: 'load',  motion: 'rise',        label: 'rise' },
+  { rung: 'Rung 2 · + feel',        on: 'load',  motion: 'pop',  feel: 'jelly', label: 'pop',  cls: 'deform' },
+  { rung: 'Rung 3 · + tune',        on: 'load',  motion: 'drop', feel: 'toon', tune: 'distance: 60px', label: 'drop', cls: 'deform' },
+  { rung: 'Trigger · click',        on: 'click', motion: 'fall', feel: 'snap', label: 'click', cls: 'ink' },
+  { rung: 'Trigger · hover',        on: 'hover', motion: 'slide-left',   label: 'hover' },
+].forEach(makeCard);
+
+// Choreography: one parent, declarative stagger, no per-child JS.
+(() => {
+  const card = document.createElement('div');
+  card.className = 'demo wide';
+  const group = document.createElement('div');
+  group.setAttribute('data-wl-stagger', 'each: 55ms; from: center');
+  group.className = 'out';
+  for (let i = 0; i < 9; i++) {
+    const sq = document.createElement('div');
+    sq.className = 'sq';
+    sq.setAttribute('data-wl', 'rise');
+    group.appendChild(sq);
+  }
+  card.innerHTML = `<div class="cap"><span class="rung">Choreography · stagger</span><span class="on">on: enter</span></div>`;
+  card.appendChild(group);
+  const code = document.createElement('code');
+  code.innerHTML =
+    `&lt;div <span class="a">data-wl-stagger</span>="<span class="v">each: 55ms; from: center</span>"&gt;\n` +
+    `  &lt;div <span class="a">data-wl</span>="<span class="v">rise</span>"&gt;&lt;/div&gt;  <span style="color:var(--ink-3)">× 9</span>\n` +
+    `&lt;/div&gt;`;
+  card.appendChild(code);
+  declareRoot.appendChild(card);
+  staggerEls.push(group);
+})();
+
+// The single call that turns all of the above into motion. Scoped to this
+// section so the physics bench below stays under manual control.
+register(declareRoot);
+
+$('replay-declare').onclick = () => [...autoEls, ...staggerEls].forEach(trigger);
+
+/* =========================================================================
+   CONFIGURATOR & STAGE (Bench & Squash)
    ========================================================================= */
 const specs = [...document.querySelectorAll('.spec')];
 const X = t => t * 560;
@@ -230,7 +335,13 @@ function renderScope() {
     ? `<br><br><b class="d">deform-timing-function:</b><br>linear(${c.deformKeep.map(([t,v])=>`${v.toFixed(3)} ${(t*100).toFixed(1)}%`).join(', ')});` 
     : '';
   $('css').innerHTML = posCSS + deformCSS;
-  
+
+  // The shippable one-liner: the same dialed-in curve as a data-wl-tune string.
+  const n = v => (+v).toFixed(2).replace(/\.?0+$/, '') || '0';
+  $('decl').innerHTML =
+    `<b>data-wl-tune</b>="weight: ${n(opts.weight)}; overshoot: ${n(opts.overshoot)}; ` +
+    `anticipation: ${n(opts.anticipate)}; squash: ${n(opts.squash)}; settle: ${opts.settle}"`;
+
   $('s-dur').textContent = c.duration + 'ms';
   $('s-stops').textContent = c.stops;
   $('s-dstops').textContent = c.deformKeep.length;
@@ -329,6 +440,7 @@ for (const b of document.querySelectorAll('.preset button[data-feel]')) {
 // the block. This also writes the vars to the live :root, so the page's own CSS
 // could consume --wl-jelly-ease etc. immediately.
 $('copy-feels').onclick = async (e) => {
+  const btn = e.currentTarget, label = 'Copy :root';   // capture before any await
   const { vars } = exportFeels();                       // writes to :root, returns the map
   const block = ':root {\n' +
     Object.entries(vars).map(([k, v]) => `  ${k}: ${v};`).join('\n') +
@@ -341,14 +453,13 @@ $('copy-feels').onclick = async (e) => {
     try { copied = document.execCommand('copy'); } catch {}
     ta.remove();
   }
-  const btn = e.currentTarget, label = 'Copy :root';
   btn.textContent = copied ? 'Copied ✓' : 'Copy failed';
   setTimeout(() => { btn.textContent = label; }, 1200);
 };
 
 
 /* =========================================================================
-   2. REDUCED MOTION (Accessibility)
+   REDUCED MOTION (Accessibility)
    ========================================================================= */
 const FULL_CFG = { weight: .4, overshoot: .3, anticipate: .12, distance: 28, squash: 0 };
 const CALM_CFG = { weight: .25, overshoot: 0, anticipate: 0, distance: 4, duration: 260, squash: 0 };
@@ -408,7 +519,7 @@ $('sim-reduced').onclick = e => {
 
 
 /* =========================================================================
-   3. RENDERING TIERS (Performance)
+   RENDERING TIERS (Performance)
    ========================================================================= */
 let jsMs = 0;
 const origRaf = window.requestAnimationFrame;

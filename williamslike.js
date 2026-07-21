@@ -818,7 +818,15 @@ export function play(el, override = {}) {
 
 let io = null;
 
-function fire(el) {
+/**
+ * Fires an element's declared animation immediately, honoring its own
+ * data-wl-stagger if present. Attaches no observers or listeners, so it is the
+ * imperative "go now" for a declaratively-configured element (e.g. replaying a
+ * section on demand). register() uses it internally for load/enter triggers.
+ *
+ * @param {Element} el - The declaratively-configured element (or stagger container) to fire
+ */
+export function trigger(el) {
   const stag = parseDecl(el.getAttribute('data-wl-stagger'), STAGGER_PROPS);
   if (stag.each != null) {
     const kids = [...el.children];
@@ -828,6 +836,7 @@ function fire(el) {
     play(el);
   }
 }
+const fire = trigger;
 
 /**
  * Recursively locates components matching trigger criteria within a root DOM subtree,
@@ -836,7 +845,11 @@ function fire(el) {
  * @param {Document|Element} root - Search origin point
  */
 export function register(root = document) {
-  const els = [...root.querySelectorAll('[data-wl], [data-wl-stagger]')];
+  // A stagger container owns the triggering of its own children. Exclude any
+  // descendants of a stagger container so they are not also bound individually,
+  // which would otherwise fire them twice (once via the stagger, once on their own).
+  const els = [...root.querySelectorAll('[data-wl], [data-wl-stagger]')]
+    .filter((el) => el.hasAttribute('data-wl-stagger') || !el.closest('[data-wl-stagger]'));
   
   io ||= new IntersectionObserver((entries) => {
     for (const e of entries) {
@@ -861,6 +874,6 @@ export default {
   curve, simulate, play, register, motions,
   prefersReduced, calmDuration, CALM_DISTANCE, generateSquashAndStretchCSS,
   defineCSSCurve, defineCSSCurves,
-  configure, defineFeel, getFeel, feelNames, exportFeels, parseDecl, resolve,
+  configure, defineFeel, getFeel, feelNames, exportFeels, parseDecl, resolve, trigger,
   get TIER() { return TIER; }, forceTier,
 };
